@@ -113,11 +113,20 @@
         // Establecer nivel de log para depuración de Firestore
         setLogLevel('Debug');
 
-        // Variables Globales (proporcionadas por el entorno)
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // Variables Globales 
+        const appId = 'vetcare-caa4c';
 
+        const firebaseConfig = {
+            apiKey: "AIzaSyCM134H_f2CbwrP4zoy8AWa2jRVLo6JBrY",
+            authDomain: "vetcare-caa4c.firebaseapp.com",
+            projectId: "vetcare-caa4c",
+            storageBucket: "vetcare-caa4c.firebasestorage.app",
+            messagingSenderId: "516432120185",
+            appId: "1:516432120185:web:30b0d2206b3406c26287a8",
+            measurementId: "G-CZ1CRWSMCS"
+        };
+        const initialAuthToken = null;
+        
         let app, db, auth;
         let isRegisterMode = false;
         let authReady = false;
