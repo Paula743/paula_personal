@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login con Firebase y Firestore</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuración de fuentes y tema de Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#8b5cf6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos básicos para el cuerpo y centrado */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            min-height: 100vh;
+        }
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+
+    <!-- Contenedor Principal de la Aplicación -->
+    <div id="app-container" class="card bg-white p-8 rounded-xl w-full max-w-md transition-all duration-300">
+
+        <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-6" id="header-title">
+            Iniciar Sesión
+        </h1>
+
+        <!-- Mensaje de Carga/Error/Éxito -->
+        <div id="message-box" class="hidden p-3 mb-4 rounded-lg text-sm transition-opacity duration-300 opacity-0"></div>
+
+        <!-- Vista de Autenticación (Login/Registro) -->
+        <div id="auth-view">
+            <form id="auth-form" class="space-y-4">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                    <input type="email" id="email" required placeholder="ejemplo@dominio.com"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                </div>
+                <div id="name-field" class="hidden">
+                    <label for="name" class="block text-sm font-medium text-gray-700">Nombre (opcional)</label>
+                    <input type="text" id="name" placeholder="Tu nombre o alias"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
+                    <input type="password" id="password" required placeholder="Mínimo 6 caracteres"
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary">
+                </div>
+
+                <button type="submit" id="auth-button"
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition duration-150">
+                    Iniciar Sesión
+                </button>
+            </form>
+
+            <div class="mt-4 text-center">
+                <button id="toggle-auth-mode" class="text-sm text-secondary hover:text-indigo-800 font-medium transition duration-150">
+                    ¿No tienes cuenta? Regístrate aquí.
+                </button>
+                <br>
+                <button id="reset-password" class="mt-3 text-xs text-gray-500 hover:text-gray-700 transition duration-150">
+                    ¿Olvidaste tu contraseña?
+                </button>
+            </div>
+        </div>
+
+        <!-- Vista de Dashboard (Usuario Logeado) -->
+        <div id="dashboard-view" class="hidden text-center">
+            <svg class="mx-auto h-16 w-16 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h2 class="text-2xl font-semibold text-gray-800 mt-4">¡Bienvenido!</h2>
+            <p id="user-info" class="mt-2 text-md text-gray-600">Cargando información del usuario...</p>
+            <p class="mt-4 text-sm text-gray-500">Tu ID de usuario para compartir es: <span id="user-id" class="font-mono text-xs text-indigo-500 break-all"></span></p>
+
+            <h3 class="mt-6 text-xl font-medium text-gray-700">Tu Mensaje Personal</h3>
+            <p id="user-message-display" class="mt-2 text-gray-600 italic">No hay mensaje guardado.</p>
+
+            <button id="logout-button"
+                    class="mt-8 w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150">
+                Cerrar Sesión
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Script de Firebase y Lógica de la Aplicación -->
+    <script type="module">
+        // Importaciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Establecer nivel de log para depuración de Firestore
+        setLogLevel('Debug');
+
+        // Variables Globales (proporcionadas por el entorno)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth;
+        let isRegisterMode = false;
+        let authReady = false;
+        let currentUserId = null;
+
+        // --- Referencias del DOM ---
+        const authView = document.getElementById('auth-view');
+        const dashboardView = document.getElementById('dashboard-view');
+        const headerTitle = document.getElementById('header-title');
+        const messageBox = document.getElementById('message-box');
+        const authForm = document.getElementById('auth-form');
+        const authButton = document.getElementById('auth-button');
+        const toggleAuthModeButton = document.getElementById('toggle-auth-mode');
+        const nameField = document.getElementById('name-field');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const nameInput = document.getElementById('name');
+        const userIdDisplay = document.getElementById('user-id');
+        const userInfoDisplay = document.getElementById('user-info');
+        const userMessageDisplay = document.getElementById('user-message-display');
+        const logoutButton = document.getElementById('logout-button');
+        const resetButton = document.getElementById('reset-password');
+
+
+        // --- Funciones de Utilidad ---
+
+        /** Muestra un mensaje en la caja de notificaciones. */
+        function showMessage(message, type = 'info') {
+            const classes = {
+                info: 'bg-blue-100 text-blue-700',
+                error: 'bg-red-100 text-red-700',
+                success: 'bg-green-100 text-green-700'
+            };
+
+            messageBox.textContent = message;
+            messageBox.className = `p-3 mb-4 rounded-lg text-sm transition-opacity duration-300 opacity-100 ${classes[type]}`;
+            messageBox.classList.remove('hidden');
+
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100');
+                messageBox.classList.add('opacity-0');
+                setTimeout(() => messageBox.classList.add('hidden'), 300);
+            }, 5000);
+        }
+
+        /** Alterna entre la vista de Login y Registro. */
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            if (isRegisterMode) {
+                headerTitle.textContent = 'Crear Cuenta';
+                authButton.textContent = 'Registrarse';
+                toggleAuthModeButton.textContent = '¿Ya tienes cuenta? Inicia Sesión.';
+                nameField.classList.remove('hidden');
+            } else {
+                headerTitle.textContent = 'Iniciar Sesión';
+                authButton.textContent = 'Iniciar Sesión';
+                toggleAuthModeButton.textContent = '¿No tienes cuenta? Regístrate aquí.';
+                nameField.classList.add('hidden');
+            }
+            authForm.reset();
+            showMessage(''); // Limpiar mensajes
+        }
+
+        // --- Funciones de Firebase ---
+
+        /** Inicializa Firebase y autentica al usuario. */
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase Config no está disponible.");
+                showMessage("Error de configuración de Firebase. No se puede iniciar.", 'error');
+                return;
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autenticación inicial con token personalizado o de forma anónima
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Listener de estado de autenticación
+                onAuthStateChanged(auth, (user) => {
+                    authReady = true;
+                    if (user && !user.isAnonymous) {
+                        currentUserId = user.uid;
+                        updateUI(user);
+                        listenForUserData(user.uid);
+                    } else {
+                        currentUserId = null;
+                        updateUI(null);
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                showMessage(`Error al conectar con Firebase: ${error.message}`, 'error');
+            }
+        }
+
+        /**
+         * Guarda los datos iniciales del usuario en Firestore.
+         * Colección privada: /artifacts/{appId}/users/{userId}/user_data/profile
+         */
+        async function saveUserProfile(userId, email, displayName) {
+            const path = `artifacts/${appId}/users/${userId}/user_data/profile`;
+            const docRef = doc(db, path);
+            const userData = {
+                email: email,
+                displayName: displayName || 'Usuario sin nombre',
+                registeredAt: new Date().toISOString()
+            };
+
+            try {
+                await setDoc(docRef, userData);
+                console.log("Perfil de usuario guardado exitosamente.");
+            } catch (e) {
+                console.error("Error al guardar el perfil del usuario: ", e);
+                showMessage("Advertencia: No se pudo guardar el perfil inicial en la base de datos.", 'error');
+            }
+        }
+
+        /**
+         * Escucha los cambios en el perfil del usuario en tiempo real.
+         * Colección privada: /artifacts/{appId}/users/{userId}/user_data/profile
+         */
+        function listenForUserData(userId) {
+            const path = `artifacts/${appId}/users/${userId}/user_data/profile`;
+            const docRef = doc(db, path);
+
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    userMessageDisplay.textContent = data.customMessage || "No has definido un mensaje personal.";
+                } else {
+                    userMessageDisplay.textContent = "Perfil cargado, pero no hay datos adicionales.";
+                }
+            }, (error) => {
+                console.error("Error al escuchar los datos del usuario:", error);
+                showMessage("Error al cargar los datos en tiempo real.", 'error');
+            });
+        }
+
+        /** Maneja el envío del formulario de autenticación. */
+        async function handleAuthFormSubmit(event) {
+            event.preventDefault();
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            const displayName = nameInput.value.trim();
+            authButton.disabled = true;
+            authButton.textContent = isRegisterMode ? 'Registrando...' : 'Iniciando...';
+            showMessage('');
+
+            try {
+                if (isRegisterMode) {
+                    // --- REGISTRO ---
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    await saveUserProfile(userCredential.user.uid, email, displayName);
+                    showMessage("¡Registro exitoso! Ya estás logeado.", 'success');
+                } else {
+                    // --- LOGIN ---
+                    await signInWithEmailAndPassword(auth, email, password);
+                    showMessage("Inicio de sesión exitoso.", 'success');
+                }
+            } catch (error) {
+                console.error("Error de autenticación:", error);
+                let errorMessage = "Ocurrió un error. Inténtalo de nuevo.";
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                    case 'auth/wrong-password':
+                        errorMessage = "Correo o contraseña inválidos.";
+                        break;
+                    case 'auth/email-already-in-use':
+                        errorMessage = "El correo ya está registrado.";
+                        break;
+                    case 'auth/weak-password':
+                        errorMessage = "La contraseña debe tener al menos 6 caracteres.";
+                        break;
+                    default:
+                        errorMessage = `Error: ${error.message}`;
+                }
+                showMessage(errorMessage, 'error');
+            } finally {
+                authButton.disabled = false;
+                authButton.textContent = isRegisterMode ? 'Registrarse' : 'Iniciar Sesión';
+            }
+        }
+
+        /** Maneja el restablecimiento de contraseña (Envío de Correo). */
+        async function handlePasswordReset() {
+            const email = emailInput.value.trim();
+            if (!email) {
+                showMessage("Por favor, introduce tu correo electrónico en el campo de arriba para restablecer la contraseña.", 'info');
+                return;
+            }
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                showMessage(`Se ha enviado un correo de restablecimiento a ${email}. ¡Revisa tu bandeja de entrada!`, 'success');
+            } catch (error) {
+                console.error("Error al enviar el correo de restablecimiento:", error);
+                let errorMessage = "Error al enviar el correo. Asegúrate de que el email es correcto y está registrado.";
+                if (error.code === 'auth/user-not-found') {
+                    errorMessage = "No hay usuario registrado con ese correo electrónico.";
+                }
+                showMessage(errorMessage, 'error');
+            }
+        }
+
+        /** Maneja el cierre de sesión. */
+        async function handleLogout() {
+            try {
+                await signOut(auth);
+                showMessage("Sesión cerrada exitosamente.", 'info');
+            } catch (error) {
+                console.error("Error al cerrar sesión:", error);
+                showMessage("Error al intentar cerrar sesión.", 'error');
+            }
+        }
+
+        /** Actualiza la interfaz de usuario según el estado de autenticación. */
+        function updateUI(user) {
+            if (user) {
+                // Usuario Logeado (no anónimo)
+                authView.classList.add('hidden');
+                dashboardView.classList.remove('hidden');
+                headerTitle.textContent = 'Panel de Usuario';
+
+                // Mostrar información del usuario
+                userIdDisplay.textContent = user.uid;
+                userInfoDisplay.innerHTML = `Estás logeado como: <span class="font-bold text-primary">${user.email}</span>`;
+
+            } else {
+                // Usuario Deslogeado
+                authView.classList.remove('hidden');
+                dashboardView.classList.add('hidden');
+                headerTitle.textContent = isRegisterMode ? 'Crear Cuenta' : 'Iniciar Sesión';
+                authForm.reset();
+            }
+        }
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', initializeFirebase);
+        toggleAuthModeButton.addEventListener('click', toggleAuthMode);
+        authForm.addEventListener('submit', handleAuthFormSubmit);
+        logoutButton.addEventListener('click', handleLogout);
+        resetButton.addEventListener('click', handlePasswordReset);
+
+    </script>
+</body>
+</html>
